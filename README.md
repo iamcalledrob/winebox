@@ -249,7 +249,7 @@ Dropbox don't support. Winebox qcow2 images use a real ext4 filesystem.
   LLMs don't seem to grasp edge cases around FUSE and introduce unnecessary complexity.
 - Claudio scaffolded the nix module, the `icons` package, and tests.
 - The root dir (`package winebox`) contains the core functionality.
-  The `cli` dir glues it all together.
+  The `cmd/winebox` dir glues it all together.
 
 ## TODOs:
 - [ ] Consider an image creation helper to create and provision from a script
