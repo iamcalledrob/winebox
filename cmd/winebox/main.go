@@ -11,6 +11,7 @@ import (
 	"github.com/ncruces/zenity"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+	"robmason.co.uk/mv"
 	"robmason.co.uk/winebox"
 	"robmason.co.uk/winebox/qcow2"
 )
@@ -342,7 +343,7 @@ Creating new wine prefix image:
 
 					// Extracts to a temp location by default, move if user requested
 					if output != "" {
-						err = os.Rename(extractedIconPath, output)
+						err = mv.Move(extractedIconPath, output)
 						if err != nil {
 							return fmt.Errorf("moving extracted icon into output location: %w", err)
 						}
