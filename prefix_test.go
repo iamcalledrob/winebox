@@ -82,6 +82,11 @@ func TestReplaceUnixPathArgs(t *testing.T) {
 			want:  nil,
 		},
 		{
+			name:  "incorrectly parsed win-path is dropped",
+			input: []string{"(win-path)%f"},
+			want:  nil,
+		},
+		{
 			name:  "whitespace-only win-path is dropped",
 			input: []string{"(win-path)   "},
 			want:  nil,

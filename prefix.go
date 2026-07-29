@@ -325,38 +325,46 @@ func ConvertUnixPath(unixPath string) (windowsPath string, err error) {
 //	'hello'                            -> argument preserved intact
 func replaceUnixPathArgs(args []string) (result []string, err error) {
 	for _, arg := range args {
-		if path := strings.TrimPrefix(arg, "(win-path)"); path != arg {
-			// Ignore accidental whitespace
-			path = strings.TrimSpace(path)
+		path := strings.TrimPrefix(arg, "(win-path)")
 
-			// Desktop environments that launch via sh -c shell-quote %f before
-			// substituting it. If (win-path)%f is inside desktop-entry "..."
-			// the shell can't process those quotes, so they arrive here literally.
-			// Strip a single layer of surrounding single or double quotes.
-			if len(path) >= 2 && path[0] == '\'' && path[len(path)-1] == '\'' {
-				path = path[1 : len(path)-1]
-			} else if len(path) >= 2 && path[0] == '"' && path[len(path)-1] == '"' {
-				path = path[1 : len(path)-1]
-			}
-
-			// Was just "(win-path)", skip arg
-			if path == "" {
-				continue
-			}
-
-			var winPath string
-			winPath, err = ConvertUnixPath(path)
-			if err != nil {
-				err = fmt.Errorf("converting '%s': %w", arg, err)
-				return
-			}
-
-			result = append(result, winPath)
+		// Not a (win-path) arg, preserve
+		if path == arg {
+			result = append(result, arg)
 			continue
 		}
 
-		// Not a (win-path) arg.
-		result = append(result, arg)
+		// Ignore accidental whitespace
+		path = strings.TrimSpace(path)
+
+		// Desktop environments that launch via sh -c shell-quote %f before
+		// substituting it. If (win-path)%f is inside desktop-entry "..."
+		// the shell can't process those quotes, so they arrive here literally.
+		// Strip a single layer of surrounding single or double quotes.
+		if len(path) >= 2 && path[0] == '\'' && path[len(path)-1] == '\'' {
+			path = path[1 : len(path)-1]
+		} else if len(path) >= 2 && path[0] == '"' && path[len(path)-1] == '"' {
+			path = path[1 : len(path)-1]
+		}
+
+		// Was just "(win-path)", skip arg
+		if path == "" {
+			continue
+		}
+
+		// Some launchers leave the '%f' in place if it is not preceded with
+		// a space. Notably, vicinae.
+		if path == "%f" {
+			continue
+		}
+
+		var winPath string
+		winPath, err = ConvertUnixPath(path)
+		if err != nil {
+			err = fmt.Errorf("converting '%s': %w", arg, err)
+			return
+		}
+
+		result = append(result, winPath)
 	}
 
 	return
