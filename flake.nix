@@ -124,16 +124,25 @@
               fi
             '';
 
+            # Naively find the last .exe in the cmd as a default
+            # Will be in first capture group (hence head)
+            # Explicitly specify startupWMClass setting for complex setups.
+            wmClass =
+              if app.startupWMClass != null then app.startupWMClass
+              else let m = builtins.match ".*\\\\(.*\\.exe)( .*|$)" app.cmd; in
+                if m != null then lib.strings.toLower (builtins.head m) else null;
+
             desktopItems = lib.optional app.desktop (pkgs.makeDesktopItem {
-              name        = appName;
-              desktopName = app.desktopName;
-              exec        = lib.concatStringsSep " " (
-                              [ "${launcher}/bin/${appName}" ] ++
-                              lib.optional (app.desktopExecArgs != "") app.desktopExecArgs
-                            );
-              icon        = "winebox-${appName}";
-              mimeTypes   = app.mimeTypes;
-              categories  = app.categories;
+              name           = appName;
+              desktopName    = app.desktopName;
+              exec           = lib.concatStringsSep " " (
+                                 [ "${launcher}/bin/${appName}" ] ++
+                                 lib.optional (app.desktopExecArgs != "") app.desktopExecArgs
+                               );
+              icon           = "winebox-${appName}";
+              mimeTypes      = app.mimeTypes;
+              categories     = app.categories;
+              startupWMClass = wmClass;
             });
           }) cfg;
         in
@@ -184,6 +193,11 @@
                   type        = lib.types.listOf lib.types.str;
                   default     = [ "Application" ];
                   description = "Desktop entry categories.";
+                };
+                startupWMClass = lib.mkOption {
+                  type        = lib.types.nullOr lib.types.str;
+                  default     = null;
+                  description = "Desktop entry WM_CLASS, for window grouping and icons.";
                 };
                 passthruEnv = lib.mkOption {
                   type        = lib.types.listOf lib.types.str;
