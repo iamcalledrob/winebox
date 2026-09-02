@@ -228,6 +228,7 @@ Creating new wine prefix image:
 					BackingImagePath: args[0],
 					ChangesImagePath: changesPath,
 					WineCmd:          wineCmd,
+					RepairIfNeeded:   true,
 					InjectRegPath:    regPath,
 					ShouldCommit: func(lastCommitErr error) bool {
 						if lastCommitErr != nil {
@@ -285,6 +286,7 @@ Creating new wine prefix image:
 					BackingImagePath: args[0],
 					ChangesImagePath: changesPath,
 					WineCmd:          wineCmd,
+					RepairIfNeeded:   true,
 					InjectRegPath:    regPath,
 					ShouldCommit: func(lastCommitErr error) bool {
 						if lastCommitErr != nil {

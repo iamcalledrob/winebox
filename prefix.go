@@ -107,8 +107,9 @@ func (w *WinePrefix) Run(ctx context.Context, winExePath string, wineArgs []stri
 }
 
 func (w *WinePrefix) Bootstrap(arch string, winver string) error {
-	// Use winecfg /v NOT wineboot, in order to create a properly versioned prefix
-	// Editing the CurrentVersion regkey can cause issues due to mismatch between prefix on disk and reg.
+	// Use winecfg /v NOT wineboot, in order to create a properly versioned prefix, as wineboot won't
+	// set the windows version, and manually editing the CurrentVersion regkey can cause issues due to
+	// mismatch between prefix on disk and reg.
 	// (CurrentVersion says "this is XP", but prefix is not an XP-like prefix)
 	winecfgBin := filepath.Join(filepath.Dir(w.WinePath), "winecfg")
 
@@ -117,6 +118,12 @@ func (w *WinePrefix) Bootstrap(arch string, winver string) error {
 	_, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("winecfg: %w", withStderrOutput(err))
+	}
+
+	// Used to detect need for repair if/when wine runner changes
+	err = w.writeWineVersion()
+	if err != nil {
+		return fmt.Errorf("writing wine version: %w", err)
 	}
 
 	// Disable winemenubuilder.exe, which auto-creates desktop entries on the host.
@@ -129,6 +136,45 @@ func (w *WinePrefix) Bootstrap(arch string, winver string) error {
 	return nil
 }
 
+// RepairIfNeeded runs 'wineboot -u' to update the wine prefix when the wine runner has changed
+// since bootstrap / last repair. Necessary because changing the wine runner can silently break
+// the wine prefix and cause unpredictable instability.
+//
+// Real-world example: SketchUp Make 2017 will crash after a few mins of running after switching
+// between 11.x versions of wine-staging-tkg *if* wineboot -u is not run.
+func (w *WinePrefix) RepairIfNeeded() error {
+	prefixWineVersion, err := w.readWineVersion()
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("reading wine version: %w", err)
+	}
+
+	var currentWineVersion string
+	currentWineVersion, err = wineVersion(w.WinePath)
+	if err != nil {
+		return fmt.Errorf("obtaining current wine version: %w", err)
+	}
+
+	// No repair needed
+	// In future, check symlinks against xdg user dirs to ensure still valid.
+	if prefixWineVersion == currentWineVersion {
+		return nil
+	}
+
+	// Version mismatch -- wineboot needed
+	err = w.wineboot()
+	if err != nil {
+		return fmt.Errorf("wineboot: %w", err)
+	}
+
+	// So repair can be skipped next time
+	err = w.writeWineVersion()
+	if err != nil {
+		return fmt.Errorf("writing wine version: %w", err)
+	}
+
+	return nil
+}
+
 func (w *WinePrefix) StopWineserver() error {
 	wineserverBin := filepath.Join(filepath.Dir(w.WinePath), "wineserver")
 	cmd := exec.Command(wineserverBin, "-k")
@@ -136,6 +182,40 @@ func (w *WinePrefix) StopWineserver() error {
 	_, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("stopping wineserver: %w", withStderrOutput(err))
+	}
+	return nil
+}
+
+func (w *WinePrefix) readWineVersion() (string, error) {
+	prefixWineVersion, err := os.ReadFile(w.wineVersionFile())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("reading %s: %w", prefixWineVersion, err)
+	}
+
+	return string(prefixWineVersion), nil
+}
+
+func (w *WinePrefix) writeWineVersion() error {
+	currentWineVersion, err := wineVersion(w.WinePath)
+	if err != nil {
+		return fmt.Errorf("obtaining current wine version: %w", err)
+	}
+
+	return os.WriteFile(w.wineVersionFile(), []byte(currentWineVersion), 0600)
+}
+
+func (w *WinePrefix) wineVersionFile() string {
+	return filepath.Join(w.PrefixPath, ".winebox-wine-version")
+}
+
+// wineboot to repair an existing prefix, e.g. when wine runner changes.
+func (w *WinePrefix) wineboot() error {
+	winecfgBin := filepath.Join(filepath.Dir(w.WinePath), "wineboot")
+	cmd := exec.Command(winecfgBin, "-u")
+	cmd.Env = append(BuildEnv(DefaultPassthruEnvKeys), "WINEPREFIX="+w.PrefixPath)
+	_, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("winecfg: %w", withStderrOutput(err))
 	}
 	return nil
 }
@@ -186,8 +266,9 @@ type Session struct {
 	BackingImagePath string
 	ChangesImagePath string
 
-	WineCmd       string
-	InjectRegPath string
+	WineCmd        string
+	RepairIfNeeded bool
+	InjectRegPath  string
 
 	ShouldCommit func(lastCommitErr error) bool
 }
@@ -229,6 +310,13 @@ func (s *Session) Use(do func(prefix *WinePrefix) error) error {
 	})
 
 	err = UseImage(sharedOverlay, func() error {
+		if s.RepairIfNeeded {
+			err = prefix.RepairIfNeeded()
+			if err != nil {
+				return fmt.Errorf("repairing if needed: %w", err)
+			}
+		}
+
 		// Inject registry into overlay to allow for per-run customization (e.g. DPI)
 		if s.InjectRegPath != "" {
 			err = prefix.InjectRegistryFile(s.InjectRegPath)
@@ -377,4 +465,13 @@ func withStderrOutput(err error) error {
 	}
 
 	return err
+}
+
+func wineVersion(winePath string) (string, error) {
+	cmd := exec.Command(winePath, "--version")
+	version, err := cmd.Output()
+	if err != nil {
+		return "", withStderrOutput(err)
+	}
+	return strings.TrimSpace(string(version)), nil
 }
