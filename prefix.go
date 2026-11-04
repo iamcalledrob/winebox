@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"robmason.co.uk/winebox/icons"
+	"robmason.co.uk/winebox/sleep"
 )
 
 // DefaultPassthruEnvKeys is a minimal environment suitable for running Wine processes.
@@ -309,7 +310,22 @@ func (s *Session) Use(do func(prefix *WinePrefix) error) error {
 		_ = prefix.StopWineserver()
 	})
 
-	err = UseImage(sharedOverlay, func() error {
+	// (For workaround below)
+	// Find users of the mount point: a crude but effective way to find running wine pids.
+	//
+	// You might ask "why not walk the process trees of winebox instances"? Firstly good
+	// question, but secondly: wine daemonises its processes, so procs like wineserver
+	// won't be parented to winebox.
+	affectedPids := sleep.ProcessesUsingMount(ImageMountPoint(sharedOverlay))
+
+	// Workaround for bug where sleep would hang due to FUSE bug in Linux kernel.
+	// The workaround needs to be applied on a per-winebox-instance basis because winebox
+	// shares FUSE mounts (SharedImage) and does not daemonize itself.
+	//
+	// Shim can be removed when the Linux bug is addressed.
+	shimmedOverlay := NewSleepShimmedImage(sharedOverlay, affectedPids)
+
+	err = UseImage(shimmedOverlay, func() error {
 		if s.RepairIfNeeded {
 			err = prefix.RepairIfNeeded()
 			if err != nil {

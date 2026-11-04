@@ -21,7 +21,7 @@
 
           subPackages = [ "cmd/winebox" ];
 
-          vendorHash = "sha256-zNl8f/YDVD+QYRh7sfDsTHbWdH85SeAjJvDaze2/Sjw=";
+          vendorHash = "sha256-xBQ1VxsPueDFYdpvjSX/V8DRwMjRlOr4ZgBwc2Xn4K8=";
 
           nativeBuildInputs = [ pkgs.makeWrapper ];
 
